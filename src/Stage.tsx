@@ -6,8 +6,11 @@ type Investigator = {
   id: string;
   name: string;
   hp: number;
+  hpMax: number;
   mp: number;
+  mpMax: number;
   san: number;
+  sanMax: number;
   luck: number;
   majorWound: boolean;
   temporaryInsanity: string;
@@ -33,13 +36,17 @@ const oldStorageKey = "chub-coc-stage-state-v1";
 const databaseName = "chub-coc-stage-storage";
 const storeName = "stage-state";
 const databaseVersion = 1;
+const dbSavedEventName = "chub-coc-stage-db-saved";
 
 const createInvestigator = (name = ""): Investigator => ({
   id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
   name,
   hp: 10,
+  hpMax: 10,
   mp: 10,
+  mpMax: 10,
   san: 50,
+  sanMax: 99,
   luck: 50,
   majorWound: false,
   temporaryInsanity: "",
@@ -71,8 +78,11 @@ function normalizeState(state: Partial<StageState> | null | undefined): StageSta
       ...createInvestigator(`探索者 ${index + 1}`),
       ...investigator,
       hp: normalizeNumber(investigator.hp),
+      hpMax: normalizeNumber(investigator.hpMax ?? investigator.hp ?? 10),
       mp: normalizeNumber(investigator.mp),
+      mpMax: normalizeNumber(investigator.mpMax ?? investigator.mp ?? 10),
       san: normalizeNumber(investigator.san),
+      sanMax: normalizeNumber(investigator.sanMax ?? 99),
       luck: normalizeNumber(investigator.luck),
       majorWound: Boolean(investigator.majorWound),
       temporaryInsanity: investigator.temporaryInsanity ?? "",
@@ -175,9 +185,9 @@ function buildStageDirections(state: StageState): string {
   const lines = state.investigators.map((investigator) => {
     return [
       `名前: ${investigator.name || "未設定"}`,
-      `HP: ${investigator.hp}`,
-      `MP: ${investigator.mp}`,
-      `SAN: ${investigator.san}`,
+      `HP: ${investigator.hp}/${investigator.hpMax}`,
+      `MP: ${investigator.mp}/${investigator.mpMax}`,
+      `SAN: ${investigator.san}/${investigator.sanMax}`,
       `幸運: ${investigator.luck}`,
       `重傷: ${investigator.majorWound ? "あり" : "なし"}`,
       `一時的狂気: ${investigator.temporaryInsanity || "なし"}`,
@@ -197,14 +207,15 @@ function buildStageDirections(state: StageState): string {
 
 type CocKeeperProps = {
   initialState: StageState;
+  initialDbSaved: boolean;
   onSaveQueued: (state: StageState) => void;
 };
 
-function CocKeeper({initialState, onSaveQueued}: CocKeeperProps): ReactElement {
+function CocKeeper({initialState, initialDbSaved, onSaveQueued}: CocKeeperProps): ReactElement {
   const [draftState, setDraftState] = useState<StageState>(initialState);
   const [savedState, setSavedState] = useState<StageState>(initialState);
   const [isDirty, setIsDirty] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("保存予約済み");
+  const [saveStatus, setSaveStatus] = useState(initialDbSaved ? "Chub DB保存済み" : "保存予約済み");
   const investigators = draftState.investigators;
 
   useEffect(() => {
@@ -225,6 +236,16 @@ function CocKeeper({initialState, onSaveQueued}: CocKeeperProps): ReactElement {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const handleDbSaved = () => {
+      setIsDirty(false);
+      setSaveStatus("Chub DB保存済み");
+    };
+
+    window.addEventListener(dbSavedEventName, handleDbSaved);
+    return () => window.removeEventListener(dbSavedEventName, handleDbSaved);
   }, []);
 
   const summary = useMemo(() => {
@@ -268,15 +289,6 @@ function CocKeeper({initialState, onSaveQueued}: CocKeeperProps): ReactElement {
         return {...investigator, ...update};
       }),
     });
-  }
-
-  function changeValue(id: string, key: "hp" | "mp" | "san" | "luck", amount: number): void {
-    const target = investigators.find((investigator) => investigator.id === id);
-    if (target == null) {
-      return;
-    }
-
-    updateInvestigator(id, {[key]: normalizeNumber(target[key] + amount)});
   }
 
   function addInvestigator(): void {
@@ -353,25 +365,27 @@ function CocKeeper({initialState, onSaveQueued}: CocKeeperProps): ReactElement {
               <StatControl
                 label="HP"
                 onChange={(value) => updateInvestigator(investigator.id, {hp: value})}
-                onStep={(amount) => changeValue(investigator.id, "hp", amount)}
+                onMaxChange={(value) => updateInvestigator(investigator.id, {hpMax: value})}
                 value={investigator.hp}
+                maxValue={investigator.hpMax}
               />
               <StatControl
                 label="MP"
                 onChange={(value) => updateInvestigator(investigator.id, {mp: value})}
-                onStep={(amount) => changeValue(investigator.id, "mp", amount)}
+                onMaxChange={(value) => updateInvestigator(investigator.id, {mpMax: value})}
                 value={investigator.mp}
+                maxValue={investigator.mpMax}
               />
               <StatControl
                 label="SAN"
                 onChange={(value) => updateInvestigator(investigator.id, {san: value})}
-                onStep={(amount) => changeValue(investigator.id, "san", amount)}
+                onMaxChange={(value) => updateInvestigator(investigator.id, {sanMax: value})}
                 value={investigator.san}
+                maxValue={investigator.sanMax}
               />
               <StatControl
                 label="幸運"
                 onChange={(value) => updateInvestigator(investigator.id, {luck: value})}
-                onStep={(amount) => changeValue(investigator.id, "luck", amount)}
                 value={investigator.luck}
               />
             </div>
@@ -417,18 +431,16 @@ function CocKeeper({initialState, onSaveQueued}: CocKeeperProps): ReactElement {
 type StatControlProps = {
   label: string;
   value: number;
+  maxValue?: number;
   onChange: (value: number) => void;
-  onStep: (amount: number) => void;
+  onMaxChange?: (value: number) => void;
 };
 
-function StatControl({label, value, onChange, onStep}: StatControlProps): ReactElement {
+function StatControl({label, value, maxValue, onChange, onMaxChange}: StatControlProps): ReactElement {
   return (
     <div className="stat-control">
       <span className="stat-control__label">{label}</span>
       <div className="stat-control__row">
-        <button aria-label={`${label}を1減らす`} onClick={() => onStep(-1)} type="button">
-          -
-        </button>
         <input
           aria-label={label}
           inputMode="numeric"
@@ -436,9 +448,18 @@ function StatControl({label, value, onChange, onStep}: StatControlProps): ReactE
           type="number"
           value={value}
         />
-        <button aria-label={`${label}を1増やす`} onClick={() => onStep(1)} type="button">
-          +
-        </button>
+        {maxValue != null && (
+          <>
+            <span className="stat-control__slash">/</span>
+            <input
+              aria-label={`${label}最大値`}
+              inputMode="numeric"
+              onChange={(event) => onMaxChange?.(normalizeNumber(event.target.value))}
+              type="number"
+              value={maxValue}
+            />
+          </>
+        )}
       </div>
     </div>
   );
@@ -462,10 +483,12 @@ function MemoField({label, value, onChange}: MemoFieldProps): ReactElement {
 export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateType, ConfigType> {
   private savedState: StageState;
   private config: ConfigType;
+  private isDbSaved: boolean;
 
   constructor(data: InitialData<InitStateType, ChatStateType, MessageStateType, ConfigType>) {
     super(data);
     this.config = data.config ?? {};
+    this.isDbSaved = data.messageState != null;
     this.savedState = normalizeState(data.messageState ?? loadLocalState());
   }
 
@@ -485,6 +508,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     }
 
     this.savedState = normalizeState(_state);
+    this.isDbSaved = true;
     saveStorageState(this.savedState);
   }
 
@@ -500,14 +524,21 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     return (
       <CocKeeper
         initialState={this.savedState}
+        initialDbSaved={this.isDbSaved}
         onSaveQueued={(state) => {
           this.savedState = state;
+          this.isDbSaved = false;
         }}
       />
     );
   }
 
   private respond(sendStatusToPrompt: boolean): Partial<StageResponse<ChatStateType, MessageStateType>> {
+    if (sendStatusToPrompt) {
+      this.isDbSaved = true;
+      window.dispatchEvent(new Event(dbSavedEventName));
+    }
+
     return {
       stageDirections: sendStatusToPrompt ? buildStageDirections(this.savedState) : null,
       messageState: sendStatusToPrompt ? this.savedState : null,

@@ -198,25 +198,14 @@ button:disabled {
 }
 
 .stat-control__row {
-  display: grid;
-  grid-template-columns: 34px minmax(48px, 1fr) 34px;
+  display: flex;
+  align-items: center;
   gap: 6px;
 }
 
-.stat-control button {
-  min-width: 34px;
-  min-height: 34px;
-  border: 1px solid #a8b0a3;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #1f2937;
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 1;
-}
-
 .stat-control input {
-  width: 100%;
+  width: min(100%, 72px);
+  flex: 1 1 0;
   min-height: 34px;
   border: 1px solid #a8b0a3;
   border-radius: 6px;
@@ -225,6 +214,11 @@ button:disabled {
   font-size: 18px;
   font-weight: 800;
   text-align: center;
+}
+
+.stat-control__slash {
+  color: #5f6b5e;
+  font-weight: 900;
 }
 
 .major-wound {
