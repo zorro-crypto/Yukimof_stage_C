@@ -31,9 +31,15 @@ state_schema:
               type: string
             hp:
               type: integer
+            hpMax:
+              type: integer
             mp:
               type: integer
+            mpMax:
+              type: integer
             san:
+              type: integer
+            sanMax:
               type: integer
             luck:
               type: integer
@@ -47,9 +53,3 @@ state_schema:
               type: string
             clues:
               type: string
-
-github_path: 'https://github.com/zorro-crypto/Yukimof_stage_C'
-
-
-extension_id: 'yukimof-stage-c-69294aefe93f'
-
